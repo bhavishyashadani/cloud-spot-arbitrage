@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloud Spot Arbitrage</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root { --bg:#0f1115; --card:#181b22; --line:#2a2f3a; --text:#e6e8ee; --muted:#8b93a7;
+          --azure:#3b82f6; --aws:#f59e0b; --ok:#22c55e; --bad:#ef4444; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui, sans-serif; padding:20px; }
+  h1 { font-size:20px; margin:0; } h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 10px; }
+  header { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(380px, 1fr)); gap:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; overflow-x:auto; }
+  .wide { grid-column:1 / -1; }
+  .badge { padding:2px 8px; border-radius:99px; font-size:12px; border:1px solid var(--line); }
+  .azure { color:var(--azure); } .aws { color:var(--aws); }
+  button { background:#262b36; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:5px 10px; cursor:pointer; font:inherit; font-size:12px; }
+  button:hover { border-color:var(--muted); } button.on { background:var(--ok); color:#000; }
+  table { width:100%; border-collapse:collapse; } td, th { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--muted); font-weight:500; font-size:12px; }
+  .big { font-size:22px; font-weight:600; } .muted { color:var(--muted); } .mono { font-family:ui-monospace, monospace; font-size:12px; }
+  .steps { margin:4px 0 0 0; padding-left:18px; color:var(--muted); font-size:12px; }
+  pre { background:#0b0d11; padding:10px; border-radius:6px; font-size:12px; white-space:pre-wrap; margin:10px 0 0; }
+  .failed { color:var(--bad); } .done { color:var(--ok); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Cloud Spot Arbitrage</h1>
+  <span id="mode" class="badge"></span>
+  <span id="migrating" class="badge" hidden>migration in progress…</span>
+  <span style="flex:1"></span>
+  <button id="autopilot" onclick="toggleAutopilot()">Autopilot</button>
+  <button onclick="post('/api/tick')">Refresh prices now</button>
+</header>
+
+<div class="grid">
+  <div class="card">
+    <h2>Active placement (DNS target)</h2>
+    <div id="active" class="big">—</div>
+    <div id="activeMeta" class="muted"></div>
+    <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap">
+      <button onclick="sendRequest()">Send client request</button>
+      <button onclick="post('/api/evict')">Simulate spot eviction</button>
+    </div>
+    <pre id="response" hidden></pre>
+  </div>
+
+  <div class="card">
+    <h2>Latest decision (cost model)</h2>
+    <div id="decision" class="big">—</div>
+    <div id="decisionReason" class="muted"></div>
+    <div id="rules" class="muted mono" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card wide">
+    <h2>Live spot prices — same capacity class (2 vCPU / 4 GB), $/hour</h2>
+    <table><thead><tr><th>Placement</th><th>Price</th><th>Real price</th><th></th></tr></thead><tbody id="prices"></tbody></table>
+  </div>
+
+  <div class="card wide"><h2>Price history (3 h)</h2><div style="height:280px"><canvas id="chart"></canvas></div></div>
+
+  <div class="card"><h2>Migrations</h2><div id="migrations" class="muted">none yet</div></div>
+  <div class="card"><h2>Decision log</h2><table><tbody id="decisions"></tbody></table></div>
+</div>
+
+<script>
+let state = null, chart = null;
+const fmt = p => '$' + p.toFixed(5);
+const time = ts => new Date(ts * 1000).toLocaleTimeString();
+const cls = key => key && key.startsWith('aws') ? 'aws' : 'azure';
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function post(url, body) {
+  const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body || {}) });
+  if (!r.ok) alertBox((await r.json()).detail || r.statusText);
+  setTimeout(load, 500);
+}
+function alertBox(msg) { const el = document.getElementById('response'); el.hidden = false; el.textContent = 'Error: ' + msg; }
+const toggleAutopilot = () => post('/api/autopilot', { on: !state.autopilot });
+
+async function sendRequest() {
+  const r = await fetch('/app/');
+  const el = document.getElementById('response');
+  el.hidden = false;
+  el.textContent = `HTTP ${r.status}  served by: ${r.headers.get('X-Served-By') || 'switcher'}\n` + JSON.stringify(await r.json(), null, 2);
+}
+
+function render(s) {
+  document.getElementById('mode').textContent = s.dry_run ? 'DRY RUN — simulated VMs, real prices' : 'LIVE — real VMs';
+  document.getElementById('mode').style.color = s.dry_run ? 'var(--aws)' : 'var(--ok)';
+  document.getElementById('migrating').hidden = !s.migrating;
+  const ap = document.getElementById('autopilot');
+  ap.textContent = 'Autopilot: ' + (s.autopilot ? 'ON' : 'OFF'); ap.className = s.autopilot ? 'on' : '';
+
+  const a = s.active;
+  document.getElementById('active').innerHTML = a ? `<span class="${a.cloud}">${esc(a.cloud.toUpperCase())}</span> ${esc(a.zone || a.region)}` : 'nothing running';
+  document.getElementById('activeMeta').textContent = a ? `${a.sku} · ${a.market} · ${a.instance_id} · ${a.endpoint}` : 'Turn on autopilot to deploy to the cheapest placement.';
+
+  const d = s.decisions[0];
+  document.getElementById('decision').textContent = d ? d.action + (d.target_key ? ' → ' + d.target_key : '') : '—';
+  document.getElementById('decisionReason').textContent = d ? d.detail : '';
+  const st = s.settings;
+  document.getElementById('rules').textContent = `migrate if saving ≥ ${st.min_savings_pct}% · payback ≤ ${st.payback_horizon_h}h · boot overlap ${st.boot_minutes} min · cooldown ${st.min_dwell_minutes} min · poll ${st.poll_seconds}s`;
+
+  document.getElementById('prices').innerHTML = s.latest_prices.map((p, i) => {
+    const active = a && a.key === p.key, shocked = s.shocks[p.key], excluded = s.excluded.includes(p.key);
+    return `<tr><td><span class="${p.cloud}">●</span> ${esc(p.key)} ${active ? '<span class="badge">ACTIVE</span>' : ''}
+      ${i === 0 ? '<span class="badge" style="color:var(--ok)">cheapest</span>' : ''} ${shocked ? '<span class="badge" style="color:var(--bad)">spike ×' + shocked.multiplier + '</span>' : ''}
+      ${excluded ? '<span class="badge failed">excluded</span>' : ''}</td>
+      <td class="mono">${fmt(p.price)}</td><td class="mono muted">${fmt(p.raw_price)}</td>
+      <td><button onclick='post("/api/shock", {key:${JSON.stringify(p.key)}})'>Spike ×3</button>
+          <button onclick='post("/api/migrate", {key:${JSON.stringify(p.key)}})'>Migrate here</button></td></tr>`;
+  }).join('');
+
+  document.getElementById('migrations').innerHTML = s.migrations.map(m => `<div style="margin-bottom:10px">
+      <b class="${m.status}">#${m.id} ${esc(m.status)}</b> <span class="mono">${esc(m.from_key || '—')} → ${esc(m.to_key)}</span>
+      <span class="muted">${time(m.started_ts)}${m.finished_ts ? ' · ' + Math.round(m.finished_ts - m.started_ts) + 's' : ''}</span>
+      <div class="muted" style="font-size:12px">${esc(m.reason)}</div>
+      <ol class="steps">${JSON.parse(m.steps).map(x => `<li>${esc(x.text)}</li>`).join('')}</ol></div>`).join('') || 'none yet';
+
+  document.getElementById('decisions').innerHTML = s.decisions.map(d =>
+    `<tr><td class="muted mono">${time(d.ts)}</td><td>${esc(d.action)}</td><td class="muted" style="white-space:normal">${esc(d.detail)}</td></tr>`).join('');
+
+  drawChart(s.history);
+}
+
+function drawChart(history) {
+  if (!window.Chart) return;
+  const series = {};
+  for (const h of history) (series[h.key] ||= []).push({ x: h.ts * 1000, y: h.price });
+  const palette = { azure: ['#3b82f6','#60a5fa','#93c5fd','#1d4ed8','#2563eb'], aws: ['#f59e0b','#fbbf24','#d97706'] };
+  const used = { azure: 0, aws: 0 };
+  const datasets = Object.entries(series).map(([key, data]) => {
+    const c = cls(key), color = palette[c][used[c]++ % palette[c].length];
+    return { label: key, data, borderColor: color, backgroundColor: color, pointRadius: 0, borderWidth: 2, stepped: true };
+  });
+  if (!chart) {
+    chart = new Chart(document.getElementById('chart'), { type: 'line', data: { datasets },
+      options: { animation: false, maintainAspectRatio: false, parsing: false,
+        scales: { x: { type: 'linear', ticks: { color: '#8b93a7', callback: v => new Date(v).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) }, grid: { color: '#2a2f3a' } },
+                  y: { ticks: { color: '#8b93a7', callback: v => '$' + v.toFixed(4) }, grid: { color: '#2a2f3a' } } },
+        plugins: { legend: { labels: { color: '#e6e8ee', boxWidth: 10 } } } } });
+  } else { chart.data.datasets = datasets; chart.update(); }
+}
+
+async function load() {
+  try { state = await (await fetch('/api/state')).json(); render(state); } catch (e) { console.error(e); }
+}
+load(); setInterval(load, 3000);
+</script>
+</body>
+</html>
