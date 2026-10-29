@@ -30,8 +30,8 @@ def _find_cli(name: str, fallbacks: list[str]) -> str:
 
 @dataclass(frozen=True)
 class Candidate:
-    """One place the workload could run. All candidates are the same capacity
-    class (2 vCPU / 4 GB) so their hourly prices are directly comparable."""
+    """One place the workload could run. Every candidate meets the workload's
+    minimum requirement (>= 2 vCPU, >= 2 GB RAM), so the cheapest one wins."""
     cloud: str      # "azure" | "aws"
     region: str     # Azure region or AWS region
     zone: str       # AWS availability zone ("" for Azure)
@@ -52,8 +52,8 @@ class Settings:
     # When true, no real VMs are created: providers are simulated locally.
     dry_run: bool = _env("DRY_RUN", "true").lower() == "true"
 
-    azure_sku: str = _env("AZURE_SKU", "Standard_A2_v2")
-    aws_sku: str = _env("AWS_SKU", "t3.medium")
+    azure_sku: str = _env("AZURE_SKU", "Standard_F2s_v2")
+    aws_sku: str = _env("AWS_SKU", "t3.small")
     azure_regions: list[str] = field(default_factory=lambda: _env("AZURE_REGIONS", ",".join(AZURE_REGIONS)).split(","))
     aws_region: str = _env("AWS_REGION", AWS_REGION)
     aws_zones: list[str] = field(default_factory=lambda: _env("AWS_ZONES", ",".join(AWS_ZONES)).split(","))

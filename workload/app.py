@@ -3,6 +3,7 @@ the visit counter lives in the global datastore (Cosmos DB), so it survives
 every migration - proof that state moved with the workload."""
 import os
 
+from azure.core import MatchConditions
 from azure.cosmos import CosmosClient, exceptions
 from fastapi import FastAPI
 
@@ -31,7 +32,7 @@ def increment_visits() -> int:
         doc["visits"] += 1
         doc["served_by"][INFO["cloud"]] = doc["served_by"].get(INFO["cloud"], 0) + 1
         try:
-            container.replace_item("counter", doc, etag=doc["_etag"], match_condition="IfNotModified")
+            container.replace_item("counter", doc, etag=doc["_etag"], match_condition=MatchConditions.IfNotModified)
             return doc["visits"]
         except exceptions.CosmosAccessConditionFailedError:
             continue

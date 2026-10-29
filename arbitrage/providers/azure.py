@@ -7,8 +7,7 @@ from pathlib import Path
 from ..config import Candidate, settings
 from .base import TAG_KEY, TAG_VALUE, Instance, Provider, startup_script
 
-# A-series v2 VMs only support generation-1 images.
-IMAGE = "Canonical:0001-com-ubuntu-server-jammy:22_04-lts:latest"
+IMAGE = "Canonical:0001-com-ubuntu-server-jammy:22_04-lts-gen2:latest"
 
 
 def az(*args: str, check: bool = True) -> dict | list | None:
