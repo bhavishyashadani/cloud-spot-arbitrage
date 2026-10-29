@@ -62,7 +62,7 @@ class Settings:
     azure_home_region: str = _env("AZURE_HOME_REGION", "koreacentral")
     aws_security_group: str = _env("AWS_SECURITY_GROUP", "cloud-arbitrage-sg")
 
-    workload_image: str = _env("WORKLOAD_IMAGE", "ghcr.io/bhavishyashadani/arbitrage-workload:latest")
+    workload_image: str = _env("WORKLOAD_IMAGE", "ghcr.io/bhavishyashadani/cloud-spot-arbitrage:latest")
     workload_port: int = int(_env("WORKLOAD_PORT", "8080"))
     cosmos_endpoint: str = _env("COSMOS_ENDPOINT")
     cosmos_key: str = _env("COSMOS_KEY")
