@@ -96,7 +96,8 @@ class Toggle(BaseModel):
 
 
 class Shock(BaseModel):
-    key: str
+    key: str | None = None    # one placement ...
+    cloud: str | None = None  # ... or every placement of a cloud
     multiplier: float = 3.0
     minutes: float = 15
 
@@ -114,8 +115,12 @@ def set_autopilot(body: Toggle):
 
 @app.post("/api/shock")
 def shock(body: Shock):
-    """Simulate a spot price spike on one placement (demo of price-driven migration)."""
-    telemetry.add_shock(body.key, body.multiplier, body.minutes)
+    """Simulate a spot price spike on one placement or a whole cloud (demo of price-driven migration)."""
+    keys = [c.key for c in settings.candidates() if c.key == body.key or c.cloud == body.cloud]
+    if not keys:
+        raise HTTPException(400, "give a known placement key or cloud name")
+    for key in keys:
+        telemetry.add_shock(key, body.multiplier, body.minutes)
     threading.Thread(target=tick, daemon=True).start()
     return {"ok": True}
 

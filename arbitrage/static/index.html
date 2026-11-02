@@ -34,6 +34,8 @@
   <span id="migrating" class="badge" hidden>migration in progress…</span>
   <span style="flex:1"></span>
   <button id="autopilot" onclick="toggleAutopilot()">Autopilot</button>
+  <button onclick="post('/api/shock', {cloud:'aws'})">Simulate AWS price surge</button>
+  <button onclick="post('/api/shock', {cloud:'azure'})">Simulate Azure price surge</button>
   <button onclick="post('/api/tick')">Refresh prices now</button>
 </header>
 

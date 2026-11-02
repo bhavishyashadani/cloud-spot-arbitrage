@@ -1,0 +1,430 @@
+<title>Cloud Spot Arbitrage Guide</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a single reading column with a sticky section index on wide screens; clouds colour-coded everywhere (Azure blue, AWS amber). */
+:root {
+  --bg: #f6f7f9; --surface: #ffffff; --ink: #141a24; --muted: #5a6474; --line: #dde1e8;
+  --accent: #2e4a7d; --azure: #1f6fd1; --aws: #b86a00; --ok: #1d7a46; --bad: #b42318;
+  --code-bg: #eef1f5;
+  --f-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f131a; --surface: #161b24; --ink: #e7eaf0; --muted: #98a2b3; --line: #2a3140;
+  --accent: #8fb0e8; --azure: #5ea1f2; --aws: #f0a640; --ok: #4cc283; --bad: #f2786d; --code-bg: #1d2330; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0f131a; --surface: #161b24; --ink: #e7eaf0; --muted: #98a2b3; --line: #2a3140;
+  --accent: #8fb0e8; --azure: #5ea1f2; --aws: #f0a640; --ok: #4cc283; --bad: #f2786d; --code-bg: #1d2330; color-scheme: dark; }
+
+body { background: var(--bg); color: var(--ink); font: 16px/1.65 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 64px; }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; padding-top: 40px; font-size: 14px; }
+nav.toc ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; counter-reset: s; }
+nav.toc a { color: var(--muted); text-decoration: none; }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--accent); }
+main { min-width: 0; max-width: 72ch; }
+header.hero { padding-block: 48px 24px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.eyebrow { font: 600 12px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 800 clamp(34px, 6vw, 52px)/1.02 var(--f-display); font-stretch: 85%; margin: 12px 0 16px; text-wrap: balance; letter-spacing: -.01em; }
+h2 { font: 750 28px/1.15 var(--f-display); font-stretch: 88%; margin: 56px 0 12px; text-wrap: balance; scroll-margin-top: 24px; }
+h3 { font: 700 19px/1.3 var(--f-display); margin: 32px 0 8px; }
+p, li { max-width: 68ch; }
+.lede { font-size: 19px; color: var(--muted); }
+a { color: var(--accent); }
+code { font: 14px var(--f-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+pre.code { font: 13.5px/1.55 var(--f-mono); background: var(--code-bg); padding: 14px 16px; border-radius: 8px; overflow-x: auto; border: 1px solid var(--line); }
+pre.code code { background: none; padding: 0; }
+.cmt { color: var(--muted); }
+.azure { color: var(--azure); font-weight: 700; } .aws { color: var(--aws); font-weight: 700; }
+.ok { color: var(--ok); font-weight: 700; } .bad { color: var(--bad); font-weight: 700; }
+.table-wrap { overflow-x: auto; margin: 16px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 12px var(--f-mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+tr:last-child td { border-bottom: none; }
+td.num { font-variant-numeric: tabular-nums; font-family: var(--f-mono); font-size: 13.5px; white-space: nowrap; }
+.callout { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 14px 18px; margin: 20px 0; }
+.callout b:first-child { display: block; font: 600 12px var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+.say { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; margin: 10px 0; font-style: italic; color: var(--ink); }
+ol.steps { padding-left: 22px; } ol.steps > li { margin-bottom: 10px; }
+.pitch { font-size: 17px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px; }
+.mermaid-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin: 16px 0; }
+pre.mermaid { margin: 0; background: none; }
+details { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 10px 16px; margin: 10px 0; }
+details summary { cursor: pointer; font-weight: 700; }
+details[open] summary { margin-bottom: 6px; }
+.checklist { list-style: none; padding: 0; } .checklist li::before { content: "☐  "; color: var(--muted); font-family: var(--f-mono); }
+@media (max-width: 860px) { .wrap { grid-template-columns: minmax(0, 1fr); gap: 0; } nav.toc { display: none; } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+html { scroll-behavior: smooth; }
+</style>
+
+<div class="wrap">
+<nav class="toc" aria-label="Sections">
+  <ol>
+    <li><a href="#pitch">The 30-second pitch</a></li>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#telemetry">Price telemetry</a></li>
+    <li><a href="#cost-model">Cost model</a></li>
+    <li><a href="#migration">Migration, step by step</a></li>
+    <li><a href="#eviction">Spot eviction failover</a></li>
+    <li><a href="#switcher">Traffic switcher</a></li>
+    <li><a href="#datastore">Global datastore</a></li>
+    <li><a href="#docker">Docker, end to end</a></li>
+    <li><a href="#constraints">Free-account limits</a></li>
+    <li><a href="#results">Live test results</a></li>
+    <li><a href="#demo">Reviewer demo script</a></li>
+    <li><a href="#questions">Likely questions</a></li>
+    <li><a href="#commands">Command sheet</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="hero">
+  <div class="eyebrow">Project guide · Azure + AWS · Bhavishya Shadani</div>
+  <h1>Cloud Spot Arbitrage</h1>
+  <p class="lede">A control plane that watches live spot VM prices on Azure and AWS and moves a running Docker workload to whichever cloud is cheapest at that moment. It keeps the workload's data intact during the move and recovers automatically when a cloud takes a spot VM back.</p>
+  <p>Code: <a href="https://github.com/bhavishyashadani/cloud-spot-arbitrage">github.com/bhavishyashadani/cloud-spot-arbitrage</a></p>
+</header>
+
+<h2 id="pitch">The 30-second pitch</h2>
+<p>Learn this paragraph and open the review with it.</p>
+<div class="pitch">Cloud providers sell their spare capacity as <b>spot VMs</b>, often 70–90% cheaper than normal VMs. The catch is that the price changes all the time, and the provider can take the VM back at short notice. My project treats the two clouds like two markets. It reads live spot prices from <span class="azure">Azure</span> and <span class="aws">AWS</span> every minute, and a cost model decides whether moving is worth it. If it is, a migration engine starts a VM on the cheaper cloud, which pulls my Docker image from a registry. Traffic switches over only once the new VM is healthy, and then the old VM is deleted. The application's data lives in a global database, so nothing is lost when the workload moves. If a spot VM is evicted, the system fails over by itself.</div>
+
+<h2 id="architecture">Architecture</h2>
+<p>This is your original diagram, with each box mapped to the code that implements it. Every arrow in the diagram has a real network call behind it.</p>
+<div class="mermaid-wrap"><pre class="mermaid">
+flowchart TB
+  subgraph APIs["Cloud provider price APIs"]
+    AZP["Azure Retail Prices API<br/>(public, no login)"]
+    AWP["AWS DescribeSpotPriceHistory<br/>(boto3)"]
+  end
+  subgraph CP["Arbitrage control plane (your laptop, Python + FastAPI)"]
+    TM["Price Telemetry Monitor<br/>telemetry.py"]
+    CM["Arbitrage Cost Model<br/>cost_model.py"]
+    ME["Migration Engine<br/>migration.py"]
+    SW["Traffic Switcher<br/>switcher.py"]
+  end
+  REG["GitHub Container Registry<br/>ghcr.io/.../cloud-spot-arbitrage"]
+  subgraph WL["Cloud workload environments"]
+    AZVM["Azure Spot VM<br/>D2as_v4 · Korea / East Asia"]
+    AWVM["AWS EC2<br/>t3.small · Sydney"]
+  end
+  DB[("Azure Cosmos DB<br/>global datastore")]
+  C(("Client"))
+  AZP -- live prices --> TM
+  AWP -- live prices --> TM
+  TM -- "normalised $/hour" --> CM
+  CM -- "migrate? to where?" --> ME
+  ME -- "1. provision VM" --> AZVM
+  ME -- "1. provision VM" --> AWVM
+  AZVM -. "2. docker pull" .-> REG
+  AWVM -. "2. docker pull" .-> REG
+  ME -- "3. update route" --> SW
+  C --> SW
+  SW -- "/app/*" --> AZVM
+  SW -- "/app/*" --> AWVM
+  AZVM <-- "read/write state" --> DB
+  AWVM <-- "read/write state" --> DB
+</pre></div>
+
+<div class="table-wrap"><table>
+<thead><tr><th>Diagram box</th><th>What it really is</th><th>File</th></tr></thead>
+<tbody>
+<tr><td>Azure Spot Retail API</td><td>Microsoft's public price list API, filtered to Linux <b>Spot</b> prices for our VM size</td><td><code>arbitrage/telemetry.py</code></td></tr>
+<tr><td>AWS Spot Pricing API</td><td>EC2 <code>DescribeSpotPriceHistory</code>: the latest price in each Sydney availability zone</td><td><code>arbitrage/telemetry.py</code></td></tr>
+<tr><td>Price Telemetry Monitor</td><td>Runs every 60 s. Converts both feeds to one list of placements with a $/hour price each, and saves the history</td><td><code>telemetry.collect()</code></td></tr>
+<tr><td>Arbitrage Cost Model</td><td>A pure function with three rules: savings threshold, payback time, cooldown</td><td><code>arbitrage/cost_model.py</code></td></tr>
+<tr><td>Cross-Cloud Migration Engine</td><td>A make-before-break cutover with automatic rollback</td><td><code>arbitrage/migration.py</code></td></tr>
+<tr><td>DNS Failover Switcher</td><td>A reverse proxy at <code>/app/</code> that forwards each request to whichever VM is active</td><td><code>arbitrage/switcher.py</code></td></tr>
+<tr><td>Multi-Cloud Container Registry</td><td>GitHub Container Registry (GHCR). The image is built by GitHub Actions on every change</td><td><code>.github/workflows/</code></td></tr>
+<tr><td>Azure Spot VMs / AWS Spot Instances</td><td>Real VMs, created with the <code>az</code> CLI and <code>boto3</code></td><td><code>arbitrage/providers/</code></td></tr>
+<tr><td>Global Managed Datastore</td><td>Azure Cosmos DB, free tier. Both clouds read and write the same document</td><td><code>workload/app.py</code></td></tr>
+<tr><td>Dashboard (extra)</td><td>Live prices, price chart, active cloud, migration steps and the decision log</td><td><code>arbitrage/static/index.html</code></td></tr>
+</tbody></table></div>
+
+<p>The <b>control loop</b> in <code>app.py</code> ties everything together. Every 60 seconds it runs <code>tick()</code>:</p>
+<pre class="code"><code>quotes   = telemetry.collect()               <span class="cmt"># 1. fetch live prices from both clouds</span>
+evicted  = migration.check_eviction()        <span class="cmt"># 2. is our spot VM still alive?</span>
+decision = cost_model.evaluate(current, quotes, ...)   <span class="cmt"># 3. stay or move?</span>
+if autopilot and decision.action in ("bootstrap", "migrate"):
+    migration.start(decision.target, reason) <span class="cmt"># 4. run the migration in a background thread</span></code></pre>
+
+<h2 id="telemetry">Price telemetry</h2>
+<p>A spot price on its own means little; you need a fair comparison. Every option the system considers is called a <b>placement</b>: a cloud, a region or zone, and a VM size. Each placement gets a key like <code>aws:ap-southeast-2c:t3.small</code> or <code>azure:koreacentral:Standard_D2as_v4</code>.</p>
+<h3>Where the prices come from</h3>
+<ul>
+<li><span class="azure">Azure</span>: <code>GET https://prices.azure.com/api/retail/prices</code> with an OData filter for our VM size and allowed regions. The API also returns Windows, Low Priority and normal prices, so the code keeps only Linux rows whose name ends in <code>Spot</code>. This API needs no login.</li>
+<li><span class="aws">AWS</span>: <code>ec2.describe_spot_price_history(InstanceTypes=["t3.small"], StartTime=now)</code>. This returns the current price in each availability zone (2a, 2b, 2c), which can differ from one another.</li>
+</ul>
+<h3>Robustness</h3>
+<ul>
+<li>If one cloud's API fails, the monitor keeps going with the <b>last known price</b> for that cloud, taken from the SQLite history. One flaky API can't stop the system.</li>
+<li>Every reading is saved to the <code>prices</code> table, and the dashboard draws the chart from it.</li>
+<li><b>Simulated price spikes</b> are applied here. The real price is kept and shown next to the spiked one, so the demo stays honest.</li>
+</ul>
+
+<h2 id="cost-model">Cost model</h2>
+<p>A naive system would always jump to the cheapest cloud. That would waste money, because every move has a cost: for a few minutes, two VMs run at once. It would also cause <b>flapping</b>, where the workload jumps back and forth whenever prices wobble. The cost model migrates only when <b>all three</b> of these rules pass:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Rule</th><th>Formula</th><th>Default</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>1. Big enough saving</td><td><code>(current − best) / current × 100 ≥ MIN_SAVINGS_PCT</code></td><td class="num">10 %</td><td>Ignores noise-level differences</td></tr>
+<tr><td>2. Fast payback</td><td><code>migration_cost / hourly_saving ≤ PAYBACK_HORIZON_H</code></td><td class="num">2 h</td><td>The move must pay for itself quickly</td></tr>
+<tr><td>3. Cooldown</td><td><code>now − last_migration ≥ MIN_DWELL_MINUTES</code></td><td class="num">10 min</td><td>Prevents flapping</td></tr>
+</tbody></table></div>
+<p>The one-off <b>migration cost</b> is the new VM's price multiplied by the time both VMs run together: <code>best_price × BOOT_MINUTES / 60</code>. No data has to be copied, because the state is already in the global database, so there is no data-transfer cost.</p>
+
+<h3>Worked example with real prices</h3>
+<p>These are the prices the system read on 2 November 2026. You're running on AWS, and an AWS price surge (simulated ×3) hits:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Quantity</th><th>Value</th></tr></thead>
+<tbody>
+<tr><td>Current: <span class="aws">AWS</span> t3.small, ap-southeast-2c (×3 surge)</td><td class="num">$0.0087 × 3 = $0.0261 / h</td></tr>
+<tr><td>Best: <span class="azure">Azure</span> D2as_v4, koreacentral</td><td class="num">$0.0218 / h</td></tr>
+<tr><td>Hourly saving</td><td class="num">$0.0043 / h</td></tr>
+<tr><td>Saving %</td><td class="num">16.5 % ≥ 10 % <span class="ok">✓</span></td></tr>
+<tr><td>Migration cost (4 min overlap)</td><td class="num">$0.0218 × 4/60 = $0.00145</td></tr>
+<tr><td>Payback time</td><td class="num">0.00145 / 0.0043 = 0.34 h ≈ 20 min ≤ 2 h <span class="ok">✓</span></td></tr>
+<tr><td>Decision</td><td><b>migrate</b> → azure:koreacentral</td></tr>
+</tbody></table></div>
+<p>Without the surge, AWS costs $0.0087 and Azure $0.0218, so Azure is 150% more expensive and the model stays on AWS. That's the expected behaviour.</p>
+<p>The model is a <b>pure function</b>: it takes prices and a time and returns a decision, with no network calls. That's why it can be unit-tested. <code>tests/test_cost_model.py</code> has 6 tests covering bootstrap, migrate, below threshold, cooldown, already cheapest, and forced migration after eviction.</p>
+
+<h2 id="migration">Migration, step by step</h2>
+<p>This is the core of the project. The strategy is called <b>make-before-break</b>: the new VM is fully working <i>before</i> the old one is touched. If anything fails along the way, the old VM keeps serving and nothing breaks.</p>
+
+<div class="mermaid-wrap"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant CM as Cost model
+  participant ME as Migration engine
+  participant NEW as New VM (cheaper cloud)
+  participant REG as GHCR registry
+  participant DB as Cosmos DB
+  participant SW as Switcher
+  participant OLD as Old VM
+  CM->>ME: migrate to azure:koreacentral (16.5% cheaper)
+  ME->>NEW: create VM + startup script (az / boto3)
+  NEW->>NEW: install Docker
+  NEW->>REG: docker pull cloud-spot-arbitrage:latest
+  NEW->>NEW: docker run -p 8080:8080 -e CLOUD=... -e COSMOS_KEY=...
+  loop every 10 s, up to 15 min
+    ME->>NEW: GET /health
+    NEW->>DB: container.read()
+  end
+  NEW-->>ME: 200 OK (image pulled, DB reachable)
+  ME->>SW: active_backend = NEW
+  Note over SW: client traffic now goes to NEW
+  ME->>ME: wait 5 s for in-flight requests to finish
+  ME->>OLD: terminate VM
+</pre></div>
+
+<h3>The four steps in the code</h3>
+<ol class="steps">
+<li><b>Provision.</b> <code>provider.provision(candidate, name)</code> creates the VM.
+  <ul>
+  <li><span class="azure">Azure</span>: <code>az vm create --priority Spot --eviction-policy Delete --max-price -1 --custom-data startup.sh</code>, then <code>az vm open-port 8080</code>. <code>--max-price -1</code> means "pay up to the normal price, and evict me only when capacity runs out".</li>
+  <li><span class="aws">AWS</span>: <code>run_instances(InstanceMarketOptions={"MarketType": "spot"}, UserData=startup.sh)</code>. If the account forbids spot (the Free plan does), it retries as on-demand.</li>
+  </ul></li>
+<li><b>Wait for health.</b> The VM boots and runs the startup script, which installs Docker and runs the image. The engine polls <code>http://&lt;ip&gt;:8080/health</code> every 10 s. <code>/health</code> only returns 200 after the container is running <i>and</i> it has read from Cosmos DB, so a 200 proves the whole chain works.</li>
+<li><b>Switch the route.</b> One write sets <code>active_backend = new_id</code>. The switcher reads it on every request, so the next client request goes to the new cloud straight away. This step plays the role of updating a DNS record.</li>
+<li><b>Drain and delete the old VM.</b> After a 5-second wait for in-flight requests, the old VM is terminated. On Azure, its public IP, firewall group (NSG) and virtual network are deleted too.</li>
+</ol>
+
+<h3>What if it fails?</h3>
+<p>Everything sits inside <code>try/except</code>. On any error, such as no capacity, a health-check timeout or an API error, the engine:</p>
+<ul>
+<li>deletes the half-created new VM, so you're never billed for a broken one;</li>
+<li>leaves the route pointing at the old VM, so clients see no change;</li>
+<li><b>excludes</b> the failed placement for 30 minutes, so the next control-loop tick picks the next cheapest option;</li>
+<li>marks the migration as <code>failed</code> on the dashboard, with the exact error message.</li>
+</ul>
+<div class="callout"><b>This happened for real</b>Azure for Students rejected spot VMs of several sizes with "SkuNotAvailable / Capacity Restrictions". The engine rolled back each time, excluded that region and tried the next. Point this out in the review: it shows the system copes with real cloud failures, not just the happy path.</div>
+<p>Only one migration can run at a time, enforced by a <code>threading.Lock</code>. Every step is saved with a timestamp in the <code>migrations</code> table, and the dashboard displays them.</p>
+
+<h2 id="eviction">Spot eviction failover</h2>
+<p>A spot VM can be reclaimed by its cloud at any time. Every tick, the engine calls <code>provider.status(instance_id)</code>:</p>
+<ul>
+<li><span class="azure">Azure</span>: the VM uses <code>--eviction-policy Delete</code>, so an evicted VM simply disappears. If <code>az vm get-instance-view</code> can't find it, it was evicted.</li>
+<li><span class="aws">AWS</span>: a state of <code>terminated</code>, <code>shutting-down</code> or <code>stopped</code> that we didn't cause counts as evicted.</li>
+</ul>
+<p>When an eviction is detected, the engine clears the route, excludes that placement for 30 minutes, and the cost model immediately chooses the next cheapest placement. The cooldown rule doesn't apply here, because downtime costs more than flapping. The <b>Simulate spot eviction</b> button on the dashboard really deletes the active VM behind the system's back, so the failover you show is genuine.</p>
+
+<h2 id="switcher">Traffic switcher (the "DNS")</h2>
+<p>Clients never talk to a VM directly. They always call <code>http://localhost:8000/app/</code>. For each request, the switcher:</p>
+<ol class="steps">
+<li>reads the active backend from the database;</li>
+<li>forwards the request to <code>http://&lt;vm-ip&gt;:8080/</code> using <code>httpx</code>;</li>
+<li>returns the response with an added header, <code>X-Served-By: aws/ap-southeast-2c</code>, so you can see which cloud answered.</li>
+</ol>
+<p><b>Why not real DNS?</b> DNS records are cached by resolvers for their TTL, often 60–300 s. During that time some clients would still go to the old VM after it's deleted. A proxy switches instantly. A production system would put this proxy behind a stable public DNS name, or use a global load balancer such as Cloudflare or Azure Front Door. Your GitHub Student Pack includes a free domain if a reviewer asks about real DNS.</p>
+
+<h2 id="datastore">Global datastore: why the data survives</h2>
+<p>The VMs are <b>stateless</b>: nothing important is stored on them. All state is in <b>Azure Cosmos DB</b> (free tier, Korea Central). Both the Azure VM and the AWS VM connect to the same database over the internet.</p>
+<p>The demo state is a visit counter document:</p>
+<pre class="code"><code>{ "id": "counter", "visits": 42, "served_by": { "aws": 30, "azure": 12 } }</code></pre>
+<p>Every client request increments it. After a migration, the counter carries on from where it was, on the other cloud, and <code>served_by</code> shows that both clouds wrote to it. That's your proof that the state moved with the workload.</p>
+<h3>Optimistic concurrency</h3>
+<p>Two VMs run during a cutover, so two requests could update the counter at the same moment. The workload uses <b>ETags</b> to prevent lost updates: it reads the document with its ETag and writes back with <code>match_condition=IfNotModified</code>. If someone else changed the document in between, Cosmos rejects the write, and the code reads again and retries. No update is ever lost.</p>
+
+<h2 id="docker">Docker, end to end</h2>
+<p>Docker is what makes the workload portable across clouds. The same image runs unchanged on Azure Ubuntu and AWS Amazon Linux.</p>
+
+<h3>1. The application: <code>workload/app.py</code></h3>
+<p>A small FastAPI web app with two routes:</p>
+<ul>
+<li><code>GET /</code> increments the visit counter in Cosmos DB and returns which cloud, region and VM served the request.</li>
+<li><code>GET /health</code> checks that Cosmos DB is reachable and returns 200. The migration engine uses this.</li>
+</ul>
+<p>The VM doesn't know which cloud it's on. That information arrives through <b>environment variables</b>: <code>CLOUD</code>, <code>REGION</code>, <code>SKU</code>, <code>INSTANCE</code>, <code>COSMOS_ENDPOINT</code> and <code>COSMOS_KEY</code>.</p>
+
+<h3>2. The Dockerfile, line by line</h3>
+<pre class="code"><code>FROM python:3.12-slim                    <span class="cmt"># small official Python base image (Debian)</span>
+WORKDIR /app                             <span class="cmt"># all following commands run in /app</span>
+COPY requirements.txt .                  <span class="cmt"># copy the dependency list first...</span>
+RUN pip install --no-cache-dir -r requirements.txt   <span class="cmt"># ...so this layer is cached unless deps change</span>
+COPY app.py .                            <span class="cmt"># then the code (changes often, small layer)</span>
+EXPOSE 8080                              <span class="cmt"># documents the port the app listens on</span>
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]   <span class="cmt"># start the web server</span></code></pre>
+<p>Dependencies are copied before the code on purpose. Docker caches each layer, so editing <code>app.py</code> rebuilds only the last small layer instead of reinstalling every package.</p>
+
+<h3>3. Building and publishing: GitHub Actions → GHCR</h3>
+<p><code>.github/workflows/workload-image.yml</code> runs on GitHub's servers whenever <code>workload/</code> changes:</p>
+<ol class="steps">
+<li>checks out the code;</li>
+<li>logs in to <code>ghcr.io</code> with the repository's automatic <code>GITHUB_TOKEN</code>, so no password is stored anywhere;</li>
+<li>runs <code>docker build</code> and <code>docker push ghcr.io/bhavishyashadani/cloud-spot-arbitrage:latest</code>.</li>
+</ol>
+<p>The image is <b>public</b>, so any VM on any cloud can pull it without credentials. This is the "Multi-Cloud Container Registry" from your diagram: one registry serving both clouds.</p>
+
+<h3>4. How a VM runs it: the startup script</h3>
+<p>When the engine creates a VM, it passes this script as Azure <code>custom-data</code> or AWS <code>UserData</code>. The VM runs it once, as root, on first boot:</p>
+<pre class="code"><code>#!/bin/bash
+set -eux
+if command -v apt-get; then apt-get install -y docker.io   <span class="cmt"># Azure: Ubuntu</span>
+else dnf install -y docker; fi                             <span class="cmt"># AWS: Amazon Linux</span>
+systemctl enable --now docker
+docker run -d --restart always -p 8080:8080 \
+  -e CLOUD=aws -e REGION=ap-southeast-2c -e COSMOS_ENDPOINT=... -e COSMOS_KEY=... \
+  ghcr.io/bhavishyashadani/cloud-spot-arbitrage:latest     <span class="cmt"># pulls the image if not present</span></code></pre>
+<p><code>-p 8080:8080</code> maps the VM's port 8080 to the container's port 8080. The Azure NSG rule and the AWS security group both allow inbound traffic on 8080. <code>--restart always</code> brings the container back if it crashes or the VM reboots.</p>
+
+<h3>5. Showing Docker live to the reviewer (on your laptop)</h3>
+<p>Run these in the project folder with Docker Desktop open. They run the <b>same image the clouds run</b>, locally:</p>
+<pre class="code"><code><span class="cmt"># pull the published image from the registry</span>
+docker pull ghcr.io/bhavishyashadani/cloud-spot-arbitrage:latest
+docker images ghcr.io/bhavishyashadani/cloud-spot-arbitrage
+
+<span class="cmt"># run it locally, pretending to be a third "cloud", connected to the real Cosmos DB</span>
+docker run -d --name demo -p 8080:8080 --env-file .env -e CLOUD=laptop -e REGION=mumbai ghcr.io/bhavishyashadani/cloud-spot-arbitrage:latest
+docker ps
+<span class="cmt"># wait ~10 seconds for the web server inside the container to start, then:</span>
+curl.exe http://localhost:8080/      <span class="cmt"># visits counter continues from the cloud VMs' count</span>
+docker logs demo
+
+<span class="cmt"># clean up</span>
+docker rm -f demo</code></pre>
+<p>This makes a strong point in a review: the visit counter you get on your laptop continues from the number the cloud VMs left. Three different machines, one state.</p>
+
+<h2 id="constraints">Free-account limits (and how the design handles them)</h2>
+<p>Reviewers respect it when you understand your own constraints. Present these as findings:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Limit discovered</th><th>How the system handles it</th></tr></thead>
+<tbody>
+<tr><td><span class="aws">AWS</span> Free plan: only the <b>Sydney</b> region (ap-southeast-2) is allowed</td><td>AWS placements are the three Sydney availability zones</td></tr>
+<tr><td><span class="aws">AWS</span> Free plan: <b>spot launches are blocked</b> by an Organizations service control policy</td><td>The provider tries spot first, then falls back to on-demand. The dashboard shows the market as "on-demand (spot blocked on Free plan)". Decisions still use real AWS spot prices.</td></tr>
+<tr><td><span class="aws">AWS</span> Free plan: only free-tier instance types (t3.medium rejected)</td><td><code>t3.small</code> (2 vCPU / 2 GB)</td></tr>
+<tr><td><span class="azure">Azure</span> for Students: only 5 regions allowed</td><td>Read from the subscription's "Allowed regions" policy</td></tr>
+<tr><td><span class="azure">Azure</span> for Students: spot "capacity restrictions" on A2_v2, F2s_v2, D2s_v3</td><td>A probe script tried each size in each region. <code>D2as_v4</code> works in koreacentral and eastasia, so those are used.</td></tr>
+<tr><td>Different VM sizes on each cloud</td><td>Placements are compared by the workload's <b>minimum requirement</b> (≥ 2 vCPU, ≥ 2 GB), which is how real schedulers work</td></tr>
+</tbody></table></div>
+
+<h2 id="results">Live test results</h2>
+<p>This is a full run on <b>real VMs</b> on 2 November 2026, driven by the dashboard's own API. You can quote these numbers in your report.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>#</th><th>Trigger</th><th>From → to</th><th>Duration</th><th>Visits</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td>Autopilot on: deploy to cheapest</td><td>— → <span class="aws">AWS</span> Sydney 2c, t3.small (on-demand)</td><td class="num">117 s</td><td class="num">3, 4</td></tr>
+<tr><td class="num">2</td><td>AWS price surge ×3: "16.5% cheaper, pays back in 20.3 min"</td><td><span class="aws">AWS</span> Sydney → <span class="azure">Azure</span> Korea Central, D2as_v4 (<b>spot</b>)</td><td class="num">142 s</td><td class="num">5</td></tr>
+<tr><td class="num">3</td><td>Simulated spot eviction (VM really deleted)</td><td><span class="azure">Azure</span> Korea → <span class="azure">Azure</span> East Asia, D2as_v4 (<b>spot</b>)</td><td class="num">133 s</td><td class="num">6</td></tr>
+<tr><td class="num">—</td><td>Same Docker image on the laptop</td><td>local Docker Desktop</td><td class="num">~10 s</td><td class="num">7</td></tr>
+</tbody></table></div>
+<ul>
+<li><b>Every request returned HTTP 200.</b> During the price migration, the old AWS VM served traffic until the Azure VM passed its health check.</li>
+<li><b>The visit counter never reset</b> (3 → 4 → 5 → 6 → 7) across three cloud VMs and a laptop. This proves the state lives in the global datastore.</li>
+<li>Each migration took about 2 minutes: 30–80 s for the cloud to create the VM, and about 60 s to install Docker, pull the image and pass the health check.</li>
+<li>After the test, <code>teardown</code> left only the free Cosmos DB account.</li>
+</ul>
+<p>Earlier attempts also tested the failure path for real. Azure rejected A2_v2 and F2s_v2 spot VMs with "Capacity Restrictions", and AWS rejected t3.medium as "not eligible for Free Tier". Each time the engine rolled back, excluded the placement and tried the next one, as designed.</p>
+
+<h2 id="demo">Reviewer demo script</h2>
+<p>Plan about 15 minutes in total. The real-cloud steps take 2–4 minutes each while VMs boot, so <b>talk through the architecture while you wait</b>.</p>
+
+<h3>The day before</h3>
+<ul class="checklist">
+<li>Run <code>.\.venv\Scripts\python -m arbitrage status</code>: logins work and nothing is running.</li>
+<li>Do one full rehearsal. Afterwards, run <code>teardown</code>.</li>
+<li>Make sure Docker Desktop starts and <code>docker pull</code> works (see the Docker section).</li>
+<li>Open this guide and the GitHub repo in browser tabs.</li>
+</ul>
+
+<h3>15 minutes before</h3>
+<ol class="steps">
+<li>Open Docker Desktop and VS Code in the project folder.</li>
+<li>Start the control plane in a terminal:
+<pre class="code"><code>.\.venv\Scripts\python -m arbitrage run</code></pre></li>
+<li>Open <b>http://localhost:8000</b>. The badge should say <b>LIVE — real VMs</b>, and both clouds' prices should be listed.</li>
+<li>Turn <b>Autopilot ON</b> now. The first deployment takes about 2 minutes, so it's ready by the time the reviewer arrives.</li>
+</ol>
+
+<h3>During the review</h3>
+<ol class="steps">
+<li><b>Pitch and architecture (2 min).</b> Say the 30-second pitch, then show the architecture diagram above.</li>
+<li><b>Live prices (1 min).</b> Point to the price table and chart.
+<p class="say">"These are real spot prices, fetched this minute from Microsoft's and Amazon's APIs. AWS Sydney is about $0.009 an hour; Azure Korea is about $0.022."</p></li>
+<li><b>The active placement (1 min).</b> Click <b>Send client request</b> two or three times.
+<p class="say">"The client calls one address. The header shows AWS served it. The visit counter is stored in Cosmos DB, not on the VM."</p>
+Optional: open the AWS console, go to EC2 → Instances (Sydney), and show the real instance tagged <code>project=cloud-arbitrage</code>.</li>
+<li><b>Price-driven migration (4 min).</b> Click <b>Simulate AWS price surge</b>.
+<p class="say">"I'm simulating AWS spot prices tripling. The real price is still shown in the grey column. Watch the decision box: 16% saving, payback in about 20 minutes, so the model decides to migrate."</p>
+While the migration panel ticks through steps 1–4, explain make-before-break using the sequence diagram. When it finishes, click <b>Send client request</b>:
+<p class="say">"Now Azure is serving, and the counter carried on from where AWS left it. The old AWS VM has been terminated."</p>
+Optional: show the Azure portal → Virtual machines, with Priority = Spot.</li>
+<li><b>Eviction failover (3 min).</b> Click <b>Simulate spot eviction</b>.
+<p class="say">"This really deletes the Azure VM without telling the engine, the same as Azure reclaiming spot capacity. On the next check it notices the VM is gone, excludes that placement, and fails over to the next cheapest one."</p></li>
+<li><b>Docker (2 min).</b> Run the local <code>docker run</code> commands from the Docker section, and show that the counter continues on your laptop.</li>
+<li><b>Code and tests (2 min).</b> Show <code>cost_model.py</code> (three rules) and run <code>.\.venv\Scripts\python -m pytest tests</code>.</li>
+<li><b>Clean up, in front of the reviewer.</b> Run <code>teardown</code>, then <code>status</code>.
+<p class="say">"Everything is tagged, so cleanup is one command. Nothing is left running."</p></li>
+</ol>
+
+<div class="callout"><b>If a cloud misbehaves during the demo</b>If Azure refuses capacity, the migration fails safely and you can explain the rollback, which is a good outcome too. If a cloud or the internet is down, stop the server, set <code>DRY_RUN=true</code> in <code>.env</code>, and restart it. The same dashboard then runs with real prices and simulated VMs, and every button still works.</div>
+
+<h2 id="questions">Likely reviewer questions</h2>
+<details><summary>Why not just always use the cheapest cloud?</summary><p>Every migration costs money, because two VMs overlap during the switch, and it carries risk. Price differences of a few percent are noise. The three rules (savings threshold, payback time, cooldown) make sure a move is worth it and prevent flapping.</p></details>
+<details><summary>How do you avoid downtime during migration?</summary><p>Make-before-break. Traffic switches only after the new VM passes its health check, which proves the image is running and the database is reachable. The old VM keeps serving until then, and is drained for 5 seconds before it's deleted.</p></details>
+<details><summary>What happens to the data?</summary><p>The VMs are stateless. State lives in Cosmos DB, which both clouds can reach, so there's nothing to copy. ETag-based optimistic concurrency stops two VMs that run at the same time from overwriting each other's updates.</p></details>
+<details><summary>Why Docker?</summary><p>Portability. One image runs the same on Ubuntu (Azure) and Amazon Linux (AWS). The VM only needs Docker installed, and the image is pulled from one registry that both clouds can reach.</p></details>
+<details><summary>Isn't AWS running on-demand, not spot?</summary><p>Yes, because the AWS Free plan blocks spot launches through a service control policy. The code requests spot first and falls back automatically. With a paid account, the same code launches real spot instances with no change. Decisions always use real spot prices.</p></details>
+<details><summary>Why a proxy instead of real DNS?</summary><p>DNS is cached for its TTL, so some clients would keep hitting the old VM after it's deleted. A proxy switches instantly. In production you'd put it behind a stable DNS name or a global load balancer.</p></details>
+<details><summary>What if the control plane itself crashes?</summary><p>The workload keeps running, because the VMs and the database don't depend on it. All of its state (prices, active backend, migrations) is in SQLite, so it carries on after a restart. In production you'd run it on a small always-on VM, or as two replicas with leader election.</p></details>
+<details><summary>How do you know the spot VM was evicted?</summary><p>Every 60 s the engine asks the cloud for the VM's status. A deleted (Azure) or terminated (AWS) VM that the engine didn't remove itself counts as an eviction. AWS also sends a 2-minute interruption warning through instance metadata, which would be a good future improvement.</p></details>
+<details><summary>What would you improve with more time?</summary><p>Use the AWS 2-minute interruption notice and Azure Scheduled Events for earlier warning. Factor eviction-rate history into the cost model as a risk penalty. Spread across several regions for availability. Use a real global load balancer. Put Terraform in charge of the base infrastructure.</p></details>
+
+<h2 id="commands">Command sheet</h2>
+<p>Run everything from <code>C:\Users\shada\Acc</code>.</p>
+<pre class="code"><code>.\.venv\Scripts\python -m arbitrage prices          <span class="cmt"># live prices + what the model would do</span>
+.\.venv\Scripts\python -m arbitrage run             <span class="cmt"># dashboard at http://localhost:8000</span>
+.\.venv\Scripts\python -m arbitrage status          <span class="cmt"># what's running in both clouds right now</span>
+.\.venv\Scripts\python -m arbitrage teardown        <span class="cmt"># delete all VMs (keeps free Cosmos DB)</span>
+.\.venv\Scripts\python -m arbitrage teardown --all  <span class="cmt"># delete everything, including the database</span>
+.\.venv\Scripts\python -m pytest tests              <span class="cmt"># cost model unit tests</span>
+<span class="cmt"># .env: DRY_RUN=false for real VMs, DRY_RUN=true for simulated VMs with real prices</span></code></pre>
+<div class="callout"><b>Cost safety</b>Always end with <code>teardown</code>, then <code>status</code>. A running VM costs about $0.01–0.02/hour, which is small, but it adds up if you forget it for a week. Cosmos DB is on the free tier and costs nothing to keep.</div>
+</main>
+</div>

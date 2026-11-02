@@ -32,7 +32,7 @@ AWS Spot Price History ──┘          │                     ├─> AWS EC
 
 ## Cost model
 
-The workload needs **at least 2 vCPU and 2 GB RAM**. Each cloud offers one VM type that meets this and that its free account accepts: Azure `Standard_F2s_v2` (2 vCPU / 4 GB) and AWS `t3.small` (2 vCPU / 2 GB). The model compares their live hourly spot prices and migrates only when **all** of these hold:
+The workload needs **at least 2 vCPU and 2 GB RAM**. Each cloud offers one VM type that meets this and that its free account accepts: Azure `Standard_D2as_v4` (2 vCPU / 8 GB) and AWS `t3.small` (2 vCPU / 2 GB). The model compares their live hourly spot prices and migrates only when **all** of these hold:
 
 1. **Saving ≥ `MIN_SAVINGS_PCT`** (default 10%). Smaller differences are treated as noise.
 2. **Payback ≤ `PAYBACK_HORIZON_H`** (default 2 h). The one-off cost of migrating is the new VM running in parallel with the old one while it boots (`BOOT_MINUTES`). The migration has to pay that back quickly.
@@ -43,7 +43,7 @@ If the active VM is evicted, the model migrates immediately and excludes the evi
 ## Free-account constraints (and how they're handled)
 
 - **AWS Free plan** accepts only free-tier-eligible instance types, such as t3.small (t3.medium is rejected).
-- **Azure for Students** had no capacity for `Standard_A2_v2` in any allowed region, so `Standard_F2s_v2` is used. When a placement fails to provision, the engine rolls it back, excludes it for 30 minutes and tries the next cheapest.
+- **Azure for Students** rejected spot requests for A2_v2, F2s_v2 and D2s_v3 ("capacity restrictions"). A probe found that `Standard_D2as_v4` spot works in koreacentral and eastasia, so those are used. When a placement fails to provision, the engine rolls it back, excludes it for 30 minutes and tries the next cheapest.
 
 - **AWS Free plan:** only `ap-southeast-2` (Sydney) is usable, and **spot launches are blocked** by an AWS service control policy. The provider tries a spot request first and falls back to on-demand. The cost model still uses real AWS spot prices.
 - **Azure for Students:** VMs can only be deployed in koreacentral, eastasia, uaenorth, polandcentral and indonesiacentral. The spot quota is 3 vCPU per region.

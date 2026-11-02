@@ -42,7 +42,7 @@ class Candidate:
         return f"{self.cloud}:{self.zone or self.region}:{self.sku}"
 
 
-AZURE_REGIONS = ["koreacentral", "eastasia", "uaenorth", "polandcentral", "indonesiacentral"]
+AZURE_REGIONS = ["koreacentral", "eastasia"]  # regions where Azure for Students actually has spot capacity
 AWS_REGION = "ap-southeast-2"
 AWS_ZONES = ["ap-southeast-2a", "ap-southeast-2b", "ap-southeast-2c"]
 
@@ -52,7 +52,7 @@ class Settings:
     # When true, no real VMs are created: providers are simulated locally.
     dry_run: bool = _env("DRY_RUN", "true").lower() == "true"
 
-    azure_sku: str = _env("AZURE_SKU", "Standard_F2s_v2")
+    azure_sku: str = _env("AZURE_SKU", "Standard_D2as_v4")
     aws_sku: str = _env("AWS_SKU", "t3.small")
     azure_regions: list[str] = field(default_factory=lambda: _env("AZURE_REGIONS", ",".join(AZURE_REGIONS)).split(","))
     aws_region: str = _env("AWS_REGION", AWS_REGION)
