@@ -13,11 +13,37 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from . import cost_model, db, migration, providers, telemetry
-from .config import settings
+from .config import AWS_ZONES, AZURE_ALLOWED_REGIONS, VM_CATALOG, settings
 from .switcher import router as switcher_router
 
 log = logging.getLogger("control")
 _tick_lock = threading.Lock()
+
+# Cost-model settings that can be changed from the dashboard while running.
+EDITABLE = {"min_savings_pct": float, "payback_horizon_h": float, "boot_minutes": float,
+            "min_dwell_minutes": float, "poll_seconds": int}
+
+
+VM_EDITABLE = ("azure_sku", "aws_sku", "azure_regions", "aws_zones")
+
+
+def apply_overrides() -> None:
+    for name, value in db.get("settings_overrides", {}).items():
+        if name in EDITABLE:
+            setattr(settings, name, EDITABLE[name](value))
+        elif name in VM_EDITABLE:
+            setattr(settings, name, value)
+
+
+def validate_vm(body: dict) -> None:
+    if "azure_sku" in body and body["azure_sku"] not in VM_CATALOG["azure"]:
+        raise HTTPException(400, f"unknown Azure size {body['azure_sku']}")
+    if "aws_sku" in body and body["aws_sku"] not in VM_CATALOG["aws"]:
+        raise HTTPException(400, f"unknown AWS type {body['aws_sku']}")
+    if "azure_regions" in body and (not body["azure_regions"] or set(body["azure_regions"]) - set(AZURE_ALLOWED_REGIONS)):
+        raise HTTPException(400, f"pick at least one Azure region from {', '.join(AZURE_ALLOWED_REGIONS)}")
+    if "aws_zones" in body and (not body["aws_zones"] or set(body["aws_zones"]) - set(AWS_ZONES)):
+        raise HTTPException(400, f"pick at least one AWS zone from {', '.join(AWS_ZONES)}")
 
 
 def tick() -> None:
@@ -57,6 +83,7 @@ def control_loop() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db.init()
+    apply_overrides()
     threading.Thread(target=control_loop, daemon=True).start()
     yield
 
@@ -77,11 +104,13 @@ def state():
         "dry_run": settings.dry_run,
         "autopilot": db.get("autopilot", False),
         "migrating": migration.in_progress(),
-        "settings": {k: getattr(settings, k) for k in
-                     ("min_savings_pct", "payback_horizon_h", "boot_minutes", "min_dwell_minutes", "poll_seconds")},
+        "settings": {k: getattr(settings, k) for k in EDITABLE},
+        "vm": {k: getattr(settings, k) for k in VM_EDITABLE},
+        "vm_options": {"catalog": VM_CATALOG, "azure_regions": AZURE_ALLOWED_REGIONS, "aws_zones": AWS_ZONES},
         "active": migration.active_backend(),
-        "latest_prices": db.rows("SELECT p.* FROM prices p JOIN (SELECT key, MAX(ts) ts FROM prices GROUP BY key) m "
-                                 "ON p.key = m.key AND p.ts = m.ts ORDER BY p.price"),
+        "latest_prices": [p for p in db.rows("SELECT p.* FROM prices p JOIN (SELECT key, MAX(ts) ts FROM prices "
+                                             "GROUP BY key) m ON p.key = m.key AND p.ts = m.ts ORDER BY p.price")
+                          if p["key"] in {c.key for c in settings.candidates()}],
         "history": db.rows("SELECT ts, key, price FROM prices WHERE ts > ? ORDER BY ts", since),
         "shocks": telemetry.active_shocks(),
         "excluded": sorted(migration.excluded_keys()),
@@ -104,6 +133,34 @@ class Shock(BaseModel):
 
 class Target(BaseModel):
     key: str
+
+
+@app.post("/api/settings")
+def update_settings(body: dict[str, float]):
+    """Change cost-model settings at runtime; saved so they survive a restart."""
+    unknown = set(body) - set(EDITABLE)
+    if unknown:
+        raise HTTPException(400, f"not editable: {', '.join(sorted(unknown))}")
+    if any(v < 0 for v in body.values()) or body.get("poll_seconds", 10) < 10:
+        raise HTTPException(400, "values must be positive and poll_seconds at least 10")
+    db.put("settings_overrides", {**db.get("settings_overrides", {}), **body})
+    apply_overrides()
+    threading.Thread(target=tick, daemon=True).start()  # re-evaluate with the new rules now
+    return {k: getattr(settings, k) for k in EDITABLE}
+
+
+@app.post("/api/vm-config")
+def update_vm_config(body: dict):
+    """Change VM sizes / regions at runtime. If the running VM no longer matches,
+    the cost model treats its placement as unavailable and migrates to a matching one."""
+    unknown = set(body) - set(VM_EDITABLE)
+    if unknown:
+        raise HTTPException(400, f"not editable: {', '.join(sorted(unknown))}")
+    validate_vm(body)
+    db.put("settings_overrides", {**db.get("settings_overrides", {}), **body})
+    apply_overrides()
+    threading.Thread(target=tick, daemon=True).start()
+    return {k: getattr(settings, k) for k in VM_EDITABLE}
 
 
 @app.post("/api/autopilot")

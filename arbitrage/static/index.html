@@ -25,6 +25,15 @@
   .steps { margin:4px 0 0 0; padding-left:18px; color:var(--muted); font-size:12px; }
   pre { background:#0b0d11; padding:10px; border-radius:6px; font-size:12px; white-space:pre-wrap; margin:10px 0 0; }
   .failed { color:var(--bad); } .done { color:var(--ok); }
+  .vmgrid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:14px; }
+  .vmgrid fieldset { border:1px solid var(--line); border-radius:8px; padding:10px 14px 14px; margin:0; min-width:0; }
+  .vmgrid legend { padding:0 6px; }
+  .vmgrid label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .vmgrid select { width:100%; background:#0b0d11; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font:inherit; }
+  .checks { display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:4px; font-size:13px; }
+  .checks label { display:flex; gap:5px; align-items:center; color:var(--text); font-size:13px; margin:0; }
+  .settings { display:grid; grid-template-columns:1fr 110px; gap:8px 12px; align-items:center; font-size:13px; }
+  .settings input { background:#0b0d11; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:5px 8px; font:inherit; width:100%; }
 </style>
 </head>
 <body>
@@ -56,6 +65,41 @@
     <div id="decision" class="big">—</div>
     <div id="decisionReason" class="muted"></div>
     <div id="rules" class="muted mono" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <h2>Cost model settings (live)</h2>
+    <form id="settingsForm" class="settings">
+      <label for="s_min_savings_pct">Min saving to migrate (%)</label><input id="s_min_savings_pct" name="min_savings_pct" type="number" step="any" min="0">
+      <label for="s_payback_horizon_h">Payback horizon (hours)</label><input id="s_payback_horizon_h" name="payback_horizon_h" type="number" step="any" min="0">
+      <label for="s_boot_minutes">VM boot overlap (minutes)</label><input id="s_boot_minutes" name="boot_minutes" type="number" step="any" min="0">
+      <label for="s_min_dwell_minutes">Cooldown between migrations (minutes)</label><input id="s_min_dwell_minutes" name="min_dwell_minutes" type="number" step="any" min="0">
+      <label for="s_poll_seconds">Price check interval (seconds)</label><input id="s_poll_seconds" name="poll_seconds" type="number" step="1" min="10">
+      <span></span><button type="submit">Save settings</button>
+    </form>
+    <div id="settingsMsg" class="muted" style="margin-top:8px"></div>
+  </div>
+
+  <div class="card wide">
+    <h2>VM configuration (live)</h2>
+    <form id="vmForm" class="vmgrid">
+      <fieldset><legend class="azure">Azure</legend>
+        <label for="vm_azure_sku">VM size</label>
+        <select id="vm_azure_sku" name="azure_sku"></select>
+        <div class="muted" style="margin-top:8px">Regions</div>
+        <div id="vm_azure_regions" class="checks"></div>
+      </fieldset>
+      <fieldset><legend class="aws">AWS</legend>
+        <label for="vm_aws_sku">Instance type</label>
+        <select id="vm_aws_sku" name="aws_sku"></select>
+        <div class="muted" style="margin-top:8px">Availability zones (Sydney)</div>
+        <div id="vm_aws_zones" class="checks"></div>
+      </fieldset>
+      <div style="grid-column:1/-1; display:flex; gap:12px; align-items:center; flex-wrap:wrap">
+        <button type="submit">Apply VM configuration</button>
+        <span id="vmMsg" class="muted">Tested on these free accounts: Azure D2as_v4 in Korea Central / East Asia, AWS t3.small. Other sizes may be refused by the cloud; the engine then rolls back and tries the next option.</span>
+      </div>
+    </form>
   </div>
 
   <div class="card wide">
@@ -127,8 +171,56 @@ function render(s) {
   document.getElementById('decisions').innerHTML = s.decisions.map(d =>
     `<tr><td class="muted mono">${time(d.ts)}</td><td>${esc(d.action)}</td><td class="muted" style="white-space:normal">${esc(d.detail)}</td></tr>`).join('');
 
+  renderVm(s);
+  for (const [k, v] of Object.entries(s.settings)) {
+    const input = document.getElementById('s_' + k);
+    if (input && document.activeElement !== input && !input.dataset.dirty) input.value = v;
+  }
   drawChart(s.history);
 }
+
+let vmDirty = false;
+function renderVm(s) {
+  if (vmDirty) return;  // don't overwrite while the user is editing
+  const o = s.vm_options, vm = s.vm;
+  for (const cloud of ['azure', 'aws']) {
+    const sel = document.getElementById('vm_' + cloud + '_sku');
+    sel.innerHTML = Object.entries(o.catalog[cloud]).map(([name, [cpu, ram]]) =>
+      `<option value="${esc(name)}" ${vm[cloud + '_sku'] === name ? 'selected' : ''}>${esc(name)} (${cpu} vCPU / ${ram} GB)</option>`).join('');
+  }
+  const checks = (id, all, chosen) => document.getElementById(id).innerHTML = all.map(r =>
+    `<label><input type="checkbox" value="${esc(r)}" ${chosen.includes(r) ? 'checked' : ''}> ${esc(r)}</label>`).join('');
+  checks('vm_azure_regions', o.azure_regions, vm.azure_regions);
+  checks('vm_aws_zones', o.aws_zones, vm.aws_zones);
+}
+document.getElementById('vmForm').addEventListener('change', () => { vmDirty = true; });
+document.getElementById('vmForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const picked = id => [...document.querySelectorAll('#' + id + ' input:checked')].map(i => i.value);
+  const body = { azure_sku: document.getElementById('vm_azure_sku').value, aws_sku: document.getElementById('vm_aws_sku').value,
+                 azure_regions: picked('vm_azure_regions'), aws_zones: picked('vm_aws_zones') };
+  const r = await fetch('/api/vm-config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const msg = document.getElementById('vmMsg');
+  if (r.ok) { vmDirty = false; msg.textContent = 'Applied at ' + new Date().toLocaleTimeString() + '. New prices load now; if the running VM no longer matches, the engine migrates to a matching one.'; }
+  else { msg.textContent = 'Not applied: ' + ((await r.json()).detail || r.statusText); }
+  load();
+});
+
+document.getElementById('settingsForm').addEventListener('input', e => { e.target.dataset.dirty = '1'; });
+document.getElementById('settingsForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const body = {};
+  for (const input of e.target.querySelectorAll('input')) body[input.name] = Number(input.value);
+  const r = await fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const msg = document.getElementById('settingsMsg');
+  if (r.ok) {
+    e.target.querySelectorAll('input').forEach(i => delete i.dataset.dirty);
+    msg.textContent = 'Saved at ' + new Date().toLocaleTimeString() + ' — the cost model re-evaluated with the new rules.';
+  } else {
+    msg.textContent = 'Not saved: ' + ((await r.json()).detail || r.statusText);
+  }
+  load();
+});
 
 function drawChart(history) {
   if (!window.Chart) return;

@@ -43,6 +43,14 @@ class Candidate:
 
 
 AZURE_REGIONS = ["koreacentral", "eastasia"]  # regions where Azure for Students actually has spot capacity
+AZURE_ALLOWED_REGIONS = ["koreacentral", "eastasia", "uaenorth", "polandcentral", "indonesiacentral"]
+
+# VM sizes selectable from the dashboard: name -> (vCPU, GB RAM). AWS lists only
+# x86 free-tier types (the startup script uses an x86 Amazon Linux image).
+VM_CATALOG = {
+    "azure": {"Standard_D2as_v4": (2, 8), "Standard_F2s_v2": (2, 4), "Standard_D2s_v3": (2, 8), "Standard_A2_v2": (2, 4)},
+    "aws": {"t3.micro": (2, 1), "t3.small": (2, 2), "c7i-flex.large": (2, 4), "m7i-flex.large": (2, 8)},
+}
 AWS_REGION = "ap-southeast-2"
 AWS_ZONES = ["ap-southeast-2a", "ap-southeast-2b", "ap-southeast-2c"]
 
